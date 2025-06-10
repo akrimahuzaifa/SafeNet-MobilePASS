@@ -31,22 +31,31 @@ def launch_safenet():
         time.sleep(5)
 
 # === Helper: Automate SafeNet ===
-def get_passcode(token_pin = credentials["token_PIN"], token_name = credentials["token_name"]):
+def get_passcode(token_pin=credentials["token_PIN"], token_name=credentials["token_name"]):
     launch_safenet()
     app = Application(backend="uia").connect(title_re=".*MobilePASS.*")
     window = app.window(title_re=".*MobilePASS.*")
     window.set_focus()
 
     try:
-        window.child_window(title=token_name, control_type="ListItem").click_input()
-        time.sleep(1)
-        pin_box = window.child_window(control_type="Edit")
-        pin_box.type_keys(token_pin)
-        window.child_window(title="Continue", control_type="Button").click_input()
-        time.sleep(2)
-        window.child_window(title="Copy Passcode", control_type="Button").click_input()
-        time.sleep(0.5)
-        return pyperclip.paste()
+        # Check if "Copy Passcode" button is present (passcode window still open)
+        if window.child_window(title="Copy Passcode", control_type="Button").exists(timeout=2):
+            # Optionally, click it to copy the passcode again
+            window.child_window(title="Copy Passcode", control_type="Button").click_input()
+            time.sleep(0.5)
+            return pyperclip.paste()
+        # Otherwise, proceed with normal flow
+        if window.child_window(title=token_name, control_type="ListItem").exists(timeout=2):
+            window.child_window(title=token_name, control_type="ListItem").click_input()
+            time.sleep(1)
+            pin_box = window.child_window(control_type="Edit")
+            pin_box.type_keys(token_pin)
+            window.child_window(title="Continue", control_type="Button").click_input()
+            time.sleep(2)
+            window.child_window(title="Copy Passcode", control_type="Button").click_input()
+            time.sleep(0.5)
+            return pyperclip.paste()
+        return "❗️Failed to retrieve passcode: Neither token list nor passcode window found."
     except Exception as e:
         return f"❌ Failed to retrieve passcode: {e}"
 
