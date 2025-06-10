@@ -160,4 +160,4 @@ cython_debug/
 #.idea/
 
 # Customs Files and Folders
-credentials.json
+*.json
