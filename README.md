@@ -59,9 +59,21 @@ pip install psutil pyperclip requests pywinauto websocket-client
    }
    ```
 
-3. **Run the bot:**
+3. **To activate the Virtual Environemnt (venv):**
+
+   ```sh
+   venv\Scripts\activate
+   ```
+
+4. **Run the bot:**
+
    ```sh
    python main.py
+   ```
+
+5. **To make the bundle EXE build:**
+   ```sh
+   pyinstaller --noconfirm --clean --onefile --icon=alphasolution.ico main.py
    ```
 
 ## Usage

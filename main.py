@@ -114,18 +114,18 @@ def parse_and_validate(username, msg):
     try:
         #print(f"checking conditions for received message: {msg}")
         print(f"Message start with !getpasscode: {msg.strip().startswith("!getpasscode")}")
-        print(f"Message contains Token name {credentials['token_name2']}: {credentials['token_name2'] in msg}")
+        print(f"Message contains Token name {credentials['token_name']}: {credentials['token_name'] in msg}")
 
-        if msg.strip().startswith("!getpasscode") and (credentials['token_name2'] in msg):
+        if msg.strip().startswith("!getpasscode") and (credentials['token_name'] in msg):
             #print(f"Received message: {msg}")
             #print("Ignoring !getpasscode command")
             prefix, token_name = msg.strip().split(':')
 
             # Validate allowed users and token name    
-            if username in auth_data and token_name == credentials['token_name2']:
+            if username in auth_data and token_name == credentials['token_name']:
                 #print(f"User ID and token name condition is true")
+                print(f"username in auth_data: {username in auth_data}")
                 print(f"Credentials token_name: {token_name}")
-                print(f"Credentials token_pin: {credentials['token_PIN']}")
                 
                 return token_name, credentials['token_PIN']
         else:
@@ -165,22 +165,27 @@ def main():
             if 'd' in response and 'content' in response['d']:
                 content = response['d']['content']
                 username = response['d']['author']['username']
-                request_channel_id = response['d']['channel_id']
-
-                print(f"{username}: {content}")
+                msg_channel_id = response['d']['channel_id']
 
                 if "!getpasscode" not in content:
                     print(f"Ignoring message from {username} as it does not contain !getpasscode")
                     continue
+
+                if msg_channel_id != credentials['req_channel_id']:
+                    print(f"Ignoring message from {username} as it is not in the request channel")
+                    #send_discord_message(msg_channel_id, f"⚠️ Ignoring message from {username}. Please use the dedicated Request Channel")
+                    continue
+                
+                print(f"{username}: {content}")
                 token_name, token_pin = parse_and_validate(username, content)
                 print(f"GOT Parsed=> token_name: {token_name}, token_pin: {token_pin}")
                 if token_name and token_pin:
-                    send_discord_message(request_channel_id, f"🔄 Getting passcode for `{token_name}, request by {username}`...")
+                    send_discord_message(msg_channel_id, f"🔄 Getting passcode for `{token_name}, request by {username}`...")
                     passcode = get_passcode(token_name, token_pin)
-                    send_discord_message(request_channel_id, f"🔐 Passcode for `{token_name}`: `{passcode}`")
+                    send_discord_message(msg_channel_id, f"🔐 Passcode for `{token_name}`: `{passcode}`")
                     
                 #else:
-                    #send_discord_message(request_channel_id, "❌ VALIDATION: Invalid credentials. Use format: `!getpasscode:token_name`", DiscordMsgType.VALIDATION)
+                    #send_discord_message(credentials['val_channel_id'], "❌ VALIDATION: Invalid credentials. Use format: `!getpasscode:token_name`", DiscordMsgType.VALIDATION)
 
         except Exception as e:
             if 'NoneType' not in str(e):
