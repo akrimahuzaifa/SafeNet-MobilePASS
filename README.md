@@ -22,10 +22,16 @@ This project is a Python-based Discord bot that automates the retrieval of SafeN
   - `pywinauto`
   - `websocket-client`
 
-Install dependencies with:
+Install dependencies with (Sync):
 
 ```sh
 pip install psutil pyperclip requests pywinauto websocket-client
+```
+
+for Async Code:
+
+```sh
+pip install psutil pyperclip requests pywinauto websockets
 ```
 
 ## Setup
@@ -73,7 +79,7 @@ pip install psutil pyperclip requests pywinauto websocket-client
 
 5. **To make the bundle EXE build:**
    ```sh
-   pyinstaller --noconfirm --clean --onefile --icon=alphasolution.ico main.py
+   pyinstaller --noconfirm --clean --onefile --icon=alphasolution.ico  --name SafeNetPassBot main.py
    ```
 
 ## Usage
