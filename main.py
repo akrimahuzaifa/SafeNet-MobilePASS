@@ -8,7 +8,7 @@ import subprocess
 import threading
 import websocket
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from pywinauto import Application
 from enum import Enum
 
@@ -16,7 +16,7 @@ class DiscordMsgType(Enum):
     REQUEST = 1
     VALIDATION = 2
 
-# === Load Configs FCHOWD ===
+# === Load Configs ===
 with open('credentials.json') as f:
     credentials = json.load(f)
 
@@ -24,7 +24,7 @@ auth_data = credentials["authorized_users"]
 
 DISCORD_TOKEN = credentials["token"]
 DISCORD_GATEWAY = credentials["DISCORD_Gateway_URL"]
-SAFENET_PATH = r"C:\Program Files (x86)\SafeNet\Authentication\MobilePASS\MobilePASS.exe"  # Adjust if needed
+SAFENET_PATH = r"C:\Program Files (x86)\SafeNet\Authentication\MobilePASS\MobilePASS.exe"
 
 # --- Path Configuration ---
 if getattr(sys, 'frozen', False):
@@ -32,12 +32,10 @@ if getattr(sys, 'frozen', False):
 else:
     BASE_DIR = Path(__file__).parent
 
-# --- Log Directory and File Setup ---
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE = LOG_DIR / f"Error_Logs_{datetime.now().strftime('%Y-%m-%d')}.log"
 
-# --- Logging Setup ---
 def write_log(message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_entry = f"[{timestamp}] {message}"
@@ -45,27 +43,23 @@ def write_log(message):
         f.write(f"{log_entry}\n")
     print(log_entry)
 
-# === Helper: Launch SafeNet ===
 def launch_safenet():
     if not any("MobilePASS" in p.name() for p in psutil.process_iter()):
         subprocess.Popen(SAFENET_PATH)
         time.sleep(5)
 
-# === Helper: Automate SafeNet ===
 def get_passcode(token_name, token_pin=credentials["token_PIN"]):
     launch_safenet()
-    app = Application(backend="uia").connect(title="MobilePASS")
-    window = app.window(title_re=".*MobilePASS.*")
-    window.set_focus()
-
     try:
-        # Check if "Copy Passcode" button is present (passcode window still open)
+        app = Application(backend="uia").connect(title="MobilePASS", timeout=10)
+        window = app.window(title_re=".*MobilePASS.*")
+        window.set_focus()
+
         if window.child_window(title="Copy Passcode", control_type="Button").exists(timeout=2):
-            # Optionally, click it to copy the passcode again
             window.child_window(title="Copy Passcode", control_type="Button").click_input()
             time.sleep(0.5)
             return pyperclip.paste()
-        # Otherwise, proceed with normal flow
+
         if window.child_window(title=token_name, control_type="ListItem").exists(timeout=2):
             window.child_window(title=token_name, control_type="ListItem").click_input()
             time.sleep(1)
@@ -81,116 +75,111 @@ def get_passcode(token_name, token_pin=credentials["token_PIN"]):
         write_log(f"⚠️ Failed to retrieve passcode: {str(e)}")
         return f"❌ Failed to retrieve passcode: {e}"
 
-# === Discord Utilities ===
 def send_discord_message(channel_id, message, DiscordMsgType=DiscordMsgType.REQUEST):
     headers = {
         "authorization": DISCORD_TOKEN,
         "content-type": "application/json"
     }
-    payload = {
-        "content": message
-    }
-    
+    payload = {"content": message}
+
     url = f"https://discord.com/api/v9/channels/{channel_id}/messages"
     if DiscordMsgType == DiscordMsgType.VALIDATION:
         url = f"https://discord.com/api/v9/channels/{credentials['val_channel_id']}/messages"
-    requests.post(url, headers=headers, json=payload)
-
-# === WebSocket Helpers ===
-def send_json_request(ws, request):
-    ws.send(json.dumps(request))
-
-def recieve_json_response(ws):
-    return json.loads(ws.recv())
+    try:
+        requests.post(url, headers=headers, json=payload)
+    except Exception as e:
+        write_log(f"❌ Failed to send Discord message: {e}")
 
 def heartbeat(interval, ws):
     while True:
-        time.sleep(interval)
-        heartbeat_json = {"op": 1, "d": None}
-        send_json_request(ws, heartbeat_json)
+        try:
+            time.sleep(interval)
+            heartbeat_json = {"op": 1, "d": None}
+            ws.send(json.dumps(heartbeat_json))
+        except Exception as e:
+            write_log(f"💓 Heartbeat failed: {e}")
+            break
 
-# === Auth Logic ===
 def parse_and_validate(username, msg):
     try:
-        #print(f"checking conditions for received message: {msg}")
-        print(f"Message start with !getpasscode: {msg.strip().startswith("!getpasscode")}")
-        print(f"Message contains Token name {credentials['token_name']}: {credentials['token_name'] in msg}")
-
         if msg.strip().startswith("!getpasscode") and (credentials['token_name'] in msg):
-            #print(f"Received message: {msg}")
-            #print("Ignoring !getpasscode command")
             prefix, token_name = msg.strip().split(':')
-
-            # Validate allowed users and token name    
             if username in auth_data and token_name == credentials['token_name']:
-                #print(f"User ID and token name condition is true")
-                print(f"username in auth_data: {username in auth_data}")
-                print(f"Credentials token_name: {token_name}")
-                
                 return token_name, credentials['token_PIN']
-        else:
-            print("Ignoring message, does not start with !getpasscode or does not contain valid token names")
-            #send_discord_message(credentials['req_channel_id'], "❌ VALIDATION: Ignoring message, does not start with !getpasscode or does not contain valid token names. Use format: `!getpasscode:token_name`", DiscordMsgType.VALIDATION)
-            return None, None
     except:
-        return None, None
+        pass
     return None, None
 
-# === Main Bot Logic ===
+def watchdog():
+    while True:
+        time.sleep(300)
+        print("🔍 Watchdog check - verifying app status... \n✅ Watchdog check - app is running")
+        #write_log("✅ Watchdog check - app is running")
+
 def main():
     ws = websocket.WebSocket()
-    ws.connect(DISCORD_GATEWAY)
-    event = recieve_json_response(ws)
+    try:
+        ws.connect(DISCORD_GATEWAY)
+        ws.settimeout(30)
+        event = json.loads(ws.recv())
+        heartbeat_interval = event['d']['heartbeat_interval'] / 1000
+        threading.Thread(target=heartbeat, args=(heartbeat_interval, ws), daemon=True).start()
+        threading.Thread(target=watchdog, daemon=True).start()
 
-    heartbeat_interval = event['d']['heartbeat_interval'] / 1000
-    threading.Thread(target=heartbeat, args=(heartbeat_interval, ws), daemon=True).start()
-
-    payload = {
-        "op": 2,
-        "d": {
-            "token": DISCORD_TOKEN,
-            "properties": {
-                "$os": "windows",
-                "$browser": "chrome",
-                "$device": "pc"
+        payload = {
+            "op": 2,
+            "d": {
+                "token": DISCORD_TOKEN,
+                "properties": {
+                    "$os": "windows",
+                    "$browser": "chrome",
+                    "$device": "pc"
+                }
             }
         }
-    }
-    send_json_request(ws, payload)
-    print("Connected to Discord WebSocket")
-    time.sleep(1)  # Allow some time for the connection to establish
-    while True:
-        response = recieve_json_response(ws)
-        try:
-            if 'd' in response and 'content' in response['d']:
-                content = response['d']['content']
-                username = response['d']['author']['username']
-                msg_channel_id = response['d']['channel_id']
+        ws.send(json.dumps(payload))
+        write_log("✅ Connected to Discord WebSocket")
 
-                if "!getpasscode" not in content:
-                    print(f"Ignoring message from {username} as it does not contain !getpasscode")
-                    continue
+        while True:
+            try:
+                response_raw = ws.recv()
+                response = json.loads(response_raw)
 
-                if msg_channel_id != credentials['req_channel_id']:
-                    print(f"Ignoring message from {username} as it is not in the request channel")
-                    #send_discord_message(msg_channel_id, f"⚠️ Ignoring message from {username}. Please use the dedicated Request Channel")
-                    continue
-                
-                print(f"{username}: {content}")
-                token_name, token_pin = parse_and_validate(username, content)
-                print(f"GOT Parsed=> token_name: {token_name}, token_pin: {token_pin}")
-                if token_name and token_pin:
-                    send_discord_message(msg_channel_id, f"🔄 Getting passcode for `{token_name}, request by {username}`...")
-                    passcode = get_passcode(token_name, token_pin)
-                    send_discord_message(msg_channel_id, f"🔐 Passcode for `{token_name}`: `{passcode}`")
-                    
-                #else:
-                    #send_discord_message(credentials['val_channel_id'], "❌ VALIDATION: Invalid credentials. Use format: `!getpasscode:token_name`", DiscordMsgType.VALIDATION)
+                d = response.get('d')
+                if d and 'content' in d:
+                    content = d['content']
+                    username = d['author']['username']
+                    msg_channel_id = d['channel_id']
 
-        except Exception as e:
-            if 'NoneType' not in str(e):
-                write_log(f"Error: {str(e)}")
-            #print("Error:", e)
+                    if "!getpasscode" not in content or msg_channel_id != credentials['req_channel_id']:
+                        continue
+
+                    token_name, token_pin = parse_and_validate(username, content)
+                    if token_name and token_pin:
+                        print(f"{username}: {content}")
+                        send_discord_message(msg_channel_id, f"🔄 Getting passcode for `{token_name}`, requested by {username}...")
+                        passcode = get_passcode(token_name, token_pin)
+                        send_discord_message(msg_channel_id, f"🔐 Passcode for `{token_name}`: `{passcode}`")
+                        print(f"🔐 Passcode for `{token_name}`: `{passcode}`")
+            except websocket.WebSocketTimeoutException:
+                #write_log("⏳ WebSocket timeout, continuing...")
+                continue
+            except websocket.WebSocketConnectionClosedException:
+                write_log("❌ WebSocket connection closed. Exiting main() to trigger restart...")
+                raise
+            except Exception as e:
+                write_log(f"🚨 Unexpected error: {e}")
+                time.sleep(5)
+                continue
+    except Exception as e:
+        write_log(f"💥 Unhandled error during WebSocket setup: {e}")
 
 if __name__ == "__main__":
-    main()
+    while True:
+        try:
+            write_log("🔁 Starting main()")
+            main()
+        except Exception as e:
+            write_log(f"💥 Uncaught error in main(): {e}")
+        time.sleep(5)
+        write_log("🔁 Restarting main() after failure")
