@@ -1,0 +1,7 @@
+psutil
+pyperclip
+requests
+pywinauto
+websockets
+discord.py
+python-dotenv
