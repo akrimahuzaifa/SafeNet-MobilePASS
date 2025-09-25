@@ -162,3 +162,4 @@ cython_debug/
 # Customs Files and Folders
 *.json
 *.exe
+/src/app

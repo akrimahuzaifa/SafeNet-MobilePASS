@@ -106,50 +106,32 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:
         return
-
-    # # Preprocess: Add a space after colon for !getpasscode
-    # if message.content.startswith('!getpasscode:') and not message.content.startswith('!getpasscode: '):
-    #     parts = message.content.split(':', 1)
-    #     if len(parts) == 2:
-    #         # Create a copy of the message with the fixed content
-    #         fixed_content = f"{parts[0]}: {parts[1]}"
-    #         # Create a context with the fixed content
-    #         ctx = await bot.get_context(message)
-    #         # Manually invoke the command with the fixed argument
-    #         await bot.invoke(await bot.get_command('getpasscode').callback(ctx, arg=parts[1].strip()))
-    #         return
-    # else:
-    #     await message.channel.send("❌ Unauthorized or invalid command format.")
     await bot.process_commands(message)
 
 @bot.command()
-async def reply(ctx):
-    await ctx.reply(f'{ctx.author.mention}\nThis is reply to your message: {ctx.message.content}')
-
-@bot.command()
 async def getpasscode(ctx, *, arg=None):
-    # Only allow command in a specific channel
-    allowed_channel_id = credentials.get("req_channel_id")
-    #print(f"getpasscode command for channel: {ctx.channel.id}")
-    #print(f"Allowed channel for command:     {allowed_channel_id}")
-    if str(ctx.channel.id) != str(allowed_channel_id):
-        await ctx.channel.send("❌ This command can only be used in the authorized channel.")
-        return
-
-    #await ctx.send("Command received from right channel, processing...")
-
     username = ctx.author.name
     msg = ctx.message.content
     token_name, token_pin = parse_and_validate(username, msg)
-    if token_name:
-        await ctx.send(f"🔄 Getting passcode for `{token_name}`...\nPlease Wait {ctx.author.mention}!")
-        passcode = await get_passcode(token_name, token_pin)
-        await ctx.reply(f"🔐 Passcode for `{token_name}`: `{passcode}`")
-    else:
-        if ctx.message.content.startswith('!getpasscode') and not ctx.message.content.startswith('!getpasscode '):
-            await ctx.send(f"❌ Invalid command format {ctx.author.mention}.\nPlease use `!getpasscode: <token_name>` with a space after the colon.")
-        else:
-            await ctx.send(f"❌ Unauthorized command format {ctx.author.mention}.")
+
+    # Only allow command in a specific channel
+    allowed_channel_id = credentials.get("req_channel_id")
+    expected_token_name = credentials["token_name"]
+
+    # Only process if the command is for this bot's token
+    if not (token_name and token_name == expected_token_name):
+        # Ignore commands not meant for this bot
+        return
+
+    # Now, only check for channel restriction
+    if str(ctx.channel.id) != str(allowed_channel_id):
+        await ctx.channel.send("❌ This command can only be used in the Dedicated and authorized channel.")
+        print("Blocked command from unauthorized channel.")
+        return
+
+    await ctx.reply(f"🔄 Getting passcode for `{token_name}`...\nPlease Wait {ctx.author.mention}!")
+    passcode = await get_passcode(token_name, token_pin)
+    await ctx.reply(f"🔐 Passcode for `{token_name}`: `{passcode}`")
 
 if __name__ == "__main__":
     try:
