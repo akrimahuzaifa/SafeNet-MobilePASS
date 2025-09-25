@@ -34,6 +34,11 @@ for Async Code:
 pip install psutil pyperclip requests pywinauto websockets
 ```
 
+or just directly:
+```bash
+pip install -r .\requirements.txt
+```
+
 ## Setup
 
 1. **Clone the repository:**
